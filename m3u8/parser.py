@@ -24,7 +24,6 @@ def format_date_time(value):
     return value.isoformat()
 
 
-
 class ParseError(Exception):
 
     def __init__(self, lineno, line):
@@ -69,6 +68,14 @@ def parse(content, strict=False, custom_tags_parser=None):
     for line in string_to_lines(content):
         lineno += 1
         line = line.strip()
+
+        # Call custom parser if needed
+        if line.startswith('#') and callable(custom_tags_parser):
+            go_to_next_line = custom_tags_parser(line, lineno, data, state)
+
+            # Do not try to parse other standard tags on this line if custom_tags_parser function returns 'True'
+            if go_to_next_line:
+                continue
 
         if line.startswith(protocol.ext_x_byterange):
             _parse_byterange(line, state)
@@ -189,11 +196,6 @@ def parse(content, strict=False, custom_tags_parser=None):
 
         elif line.startswith(protocol.ext_x_gap):
             state['gap'] = True
-
-        # Comments and whitespace
-        elif line.startswith('#'):
-            if callable(custom_tags_parser):
-                custom_tags_parser(line, data, lineno)
 
         elif line.strip() == '':
             # blank lines are legal
@@ -542,3 +544,29 @@ def normalize_attribute(attribute):
 
 def is_url(uri):
     return uri.startswith(('https://', 'http://'))
+
+
+def get_segment_custom_value(state, key, default=None):
+    """
+    Helper function for getting custom values for Segment
+    Are useful with custom_tags_parser
+    """
+    if 'segment' not in state:
+        return default
+    if 'custom_parser_values' not in state['segment']:
+        return default
+    return state['segment']['custom_parser_values'].get(key, default)
+
+
+def save_segment_custom_value(state, key, value):
+    """
+    Helper function for saving custom values for Segment
+    Are useful with custom_tags_parser
+    """
+    if 'segment' not in state:
+        state['segment'] = {}
+
+    if 'custom_parser_values' not in state['segment']:
+        state['segment']['custom_parser_values'] = {}
+
+    state['segment']['custom_parser_values'][key] = value
